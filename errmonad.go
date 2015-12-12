@@ -37,64 +37,64 @@ import (
 var errorType = reflect.TypeOf((*error)(nil)).Elem()
 
 // Bind takes a sequence of functions and pipes the input
-func Bind(fn1, fn2 interface{}) interface{} {
-	rfn1 := reflect.ValueOf(fn1)
-	rtyp1 := rfn1.Type()
-	if rtyp1.Kind() != reflect.Func {
-		panic("Argument is not function")
+func Bind(fns ...interface{}) interface{} {
+	if len(fns) == 0 {
+		panic("Needs at least 1 function to bind over")
 	}
-	if rtyp1.NumOut() == 0 {
-		panic("Function must at least return one argument")
-	}
-	if rtyp1.Out(rtyp1.NumOut()-1) != errorType {
-		panic("Last output argument must be of type error")
-	}
-
-	rfn2 := reflect.ValueOf(fn2)
-	rtyp2 := rfn2.Type()
-	if rtyp2.Kind() != reflect.Func {
-		panic("Argument is not function")
-	}
-	if rtyp2.NumOut() == 0 {
-		panic("Function must at least return one argument")
-	}
-	if rtyp2.Out(rtyp2.NumOut()-1) != errorType {
-		panic("Last output argument must be of type error")
+	rfns := make([]reflect.Value, len(fns), len(fns))
+	rtyps := make([]reflect.Type, len(fns), len(fns))
+	for i, fn := range fns {
+		rfns[i] = reflect.ValueOf(fn)
+		rtyps[i] = rfns[i].Type()
+		if rtyps[i].Kind() != reflect.Func {
+			panic("Argument is not function")
+		}
+		if rtyps[i].NumOut() == 0 {
+			panic("Function must at least return one argument")
+		}
+		if rtyps[i].Out(rtyps[i].NumOut()-1) != errorType {
+			panic("Last output argument must be of type error")
+		}
 	}
 
-	// Attempt to match types
-	if rtyp1.NumOut()-1 != rtyp2.NumIn() {
-		panic("Argument count mismatch")
-	}
-
-	for i := 0; i < rtyp2.NumIn(); i++ {
-		if !rtyp1.Out(i).AssignableTo(rtyp2.In(i)) {
-			panic(fmt.Sprintf("Cannot assign %s to %s", rtyp1.Out(i), rtyp2.In(i)))
+	// attempt to match types
+	for i := 0; i < len(rfns)-1; i++ {
+		if rtyps[i].NumOut()-1 != rtyps[i+1].NumIn() {
+			panic("Argument count mismatch")
+		}
+		for j := 0; j < rtyps[i+1].NumIn(); j++ {
+			if !rtyps[i].Out(j).AssignableTo(rtyps[i+1].In(j)) {
+				panic(fmt.Sprintf("Cannot assign %s to %s", rtyps[i].Out(j), rtyps[i+1].In(j)))
+			}
 		}
 	}
 
 	// Alright, let's attempt this thing.
 	bindFn := func(in []reflect.Value) []reflect.Value {
-		res := rfn1.Call(in)
-		rerr := res[len(res)-1]
-		if err, ok := rerr.Interface().(error); ok && err != nil {
-			ret := []reflect.Value{}
-			for i := 0; i < rtyp2.NumOut()-1; i++ {
-				ret = append(ret, reflect.Zero(rtyp2.Out(i)))
+		for _, fn := range rfns {
+			res := fn.Call(in)
+			rerr := res[len(res)-1]
+			// error: short-circuit
+			if err, ok := rerr.Interface().(error); ok && err != nil {
+				ret := []reflect.Value{}
+				for i := 0; i < rtyps[len(rtyps)-1].NumOut()-1; i++ {
+					ret = append(ret, reflect.Zero(rtyps[len(rtyps)-1].Out(i)))
+				}
+				return append(ret, rerr)
 			}
-			return append(ret, rerr)
+			in = res[:len(res)-1]
 		}
-		return rfn2.Call(res[:len(res)-1])
+		return append(in, reflect.Zero(errorType))
 	}
-	rtyp1In := []reflect.Type{}
-	for i := 0; i < rtyp1.NumIn(); i++ {
-		rtyp1In = append(rtyp1In, rtyp1.In(i))
+	bindIn := []reflect.Type{}
+	for i := 0; i < rtyps[0].NumIn(); i++ {
+		bindIn = append(bindIn, rtyps[0].In(i))
 	}
-	rtyp2Out := []reflect.Type{}
-	for i := 0; i < rtyp2.NumOut(); i++ {
-		rtyp2Out = append(rtyp2Out, rtyp2.Out(i))
+	bindOut := []reflect.Type{}
+	for i := 0; i < rtyps[len(rtyps)-1].NumOut(); i++ {
+		bindOut = append(bindOut, rtyps[len(rtyps)-1].Out(i))
 	}
 
-	outrFn := reflect.FuncOf(rtyp1In, rtyp2Out, false)
+	outrFn := reflect.FuncOf(bindIn, bindOut, false)
 	return reflect.MakeFunc(outrFn, bindFn).Interface()
 }
