@@ -85,18 +85,18 @@ func Example() {
 		`{"Type": "Dwarf Cavendish", "Bananas": 41}`,
 		`{"Type": "Grand Nain", "Bananas": 16}`,
 	}
+	conversions := []func([]byte) ([]byte, error){
+		doubleBananaBox,
+		quadrupleBananaBox,
+	}
 	for _, example := range examples {
-		bs, err := doubleBananaBox([]byte(example))
-		if err != nil {
-			fmt.Println(err)
-		} else {
-			fmt.Println(string(bs))
-		}
-		bs, err = quadrupleBananaBox([]byte(example))
-		if err != nil {
-			fmt.Println(err)
-		} else {
-			fmt.Println(string(bs))
+		for _, convert := range conversions {
+			bs, err := convert([]byte(example))
+			if err != nil {
+				fmt.Println(err)
+			} else {
+				fmt.Println(string(bs))
+			}
 		}
 	}
 	// Output:
