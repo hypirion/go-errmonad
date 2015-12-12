@@ -27,6 +27,8 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+// Package go-errmonad provides a single function, Bind, which can be used to
+// chain functions that may return errors.
 package errmonad
 
 import (
@@ -36,8 +38,12 @@ import (
 
 var errorType = reflect.TypeOf((*error)(nil)).Elem()
 
-// Bind takes a sequence of functions and pipes the input
+// Bind takes a sequence of functions and creates a function that pipes the
+// non-error output from a function into the next function. The last
+// output argument from all functions must be an error. If the error is not nil,
+// the remaining functions are skipped and the error is returned.
 func Bind(fns ...interface{}) interface{} {
+	// basic typechecking
 	if len(fns) == 0 {
 		panic("Needs at least 1 function to bind over")
 	}
@@ -69,7 +75,7 @@ func Bind(fns ...interface{}) interface{} {
 		}
 	}
 
-	// Alright, let's attempt this thing.
+	// Create the actual bind function
 	bindFn := func(in []reflect.Value) []reflect.Value {
 		for _, fn := range rfns {
 			res := fn.Call(in)
@@ -86,6 +92,8 @@ func Bind(fns ...interface{}) interface{} {
 		}
 		return append(in, reflect.Zero(errorType))
 	}
+
+	// create the type of this function
 	bindIn := []reflect.Type{}
 	for i := 0; i < rtyps[0].NumIn(); i++ {
 		bindIn = append(bindIn, rtyps[0].In(i))
@@ -94,7 +102,7 @@ func Bind(fns ...interface{}) interface{} {
 	for i := 0; i < rtyps[len(rtyps)-1].NumOut(); i++ {
 		bindOut = append(bindOut, rtyps[len(rtyps)-1].Out(i))
 	}
-
 	outrFn := reflect.FuncOf(bindIn, bindOut, false)
+
 	return reflect.MakeFunc(outrFn, bindFn).Interface()
 }
