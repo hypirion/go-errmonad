@@ -60,15 +60,52 @@ func (bc BananaBox) AddBananas(n int) (BananaBox, error) {
 	return bc, nil
 }
 
-var doubleEncode = monad.Bind((BananaBox).Double, json.Marshal).(func(BananaBox) ([]byte, error))
+func jsonBananaBox(bs []byte) (bb BananaBox, err error) {
+	err = json.Unmarshal(bs, &bb)
+	return
+}
+
+var doubleBananaBox = monad.Bind(
+	jsonBananaBox,
+	(BananaBox).Double,
+	json.Marshal,
+).(func([]byte) ([]byte, error))
+
+var quadrupleBananaBox = monad.Bind(
+	jsonBananaBox,
+	(BananaBox).Double,
+	(BananaBox).Double,
+	json.Marshal,
+).(func([]byte) ([]byte, error))
 
 func Example() {
-	var box BananaBox
-	json.Unmarshal([]byte(`{"Type": "Cavendish", "Bananas": 41}`), &box)
-
-	bs, err := doubleEncode(box)
-
-	fmt.Println(string(bs), err)
+	examples := []string{
+		`[]`,
+		`{"Bananas": "0"}`,
+		`{"Type": "Dwarf Cavendish", "Bananas": 41}`,
+		`{"Type": "Grand Nain", "Bananas": 16}`,
+	}
+	for _, example := range examples {
+		bs, err := doubleBananaBox([]byte(example))
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println(string(bs))
+		}
+		bs, err = quadrupleBananaBox([]byte(example))
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println(string(bs))
+		}
+	}
 	// Output:
-	// {"Type":"Cavendish","Bananas":82} <nil>
+	// json: cannot unmarshal array into Go value of type errmonad_test.BananaBox
+	// json: cannot unmarshal array into Go value of type errmonad_test.BananaBox
+	// json: cannot unmarshal string into Go value of type int
+	// json: cannot unmarshal string into Go value of type int
+	// {"Type":"Dwarf Cavendish","Bananas":82}
+	// Tried to add 82 bananas to a box with 82 bananas already inside it, will go over the limit
+	// {"Type":"Grand Nain","Bananas":32}
+	// {"Type":"Grand Nain","Bananas":64}
 }
